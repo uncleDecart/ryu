@@ -87,6 +87,10 @@ class Response(webob_Response):
     DEFAULT_CHARSET = "UTF-8"
 
     def __init__(self, charset=DEFAULT_CHARSET, *args, **kwargs):
+        if 'headerlist' in kwargs:
+          kwargs['headerlist'].append(('Access-Control-Allow-Origin', '*'))
+        else:
+          kwargs['headerlist'] = [('Access-Control-Allow-Origin', '*')]
         super(Response, self).__init__(charset=charset, *args, **kwargs)
 
 
