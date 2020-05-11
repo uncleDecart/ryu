@@ -22,12 +22,29 @@ from ryu.lib.packet import packet
 from ryu.lib.packet import ethernet
 from ryu.lib.packet import ether_types
 
+import mysql.connector
+
+import os
+import time
+import datetime
+
+
+PATH = os.path.dirname(__file__)
 
 class SimpleSwitch13(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
         super(SimpleSwitch13, self).__init__(*args, **kwargs)
+        config = {
+          'user' : 'root',
+          'password' : 'root',
+          'host' : 'db',
+          'port' : '3306',
+          'database' : 'emulator'
+        }
+        self.connection = mysql.connector.connect(**config)
+        self.cursor = self.connection.cursor()
         self.mac_to_port = {}
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
@@ -97,6 +114,13 @@ class SimpleSwitch13(app_manager.RyuApp):
             out_port = self.mac_to_port[dpid][dst]
         else:
             out_port = ofproto.OFPP_FLOOD
+
+        query = "INSERT INTO send_events (dpid, from_mac, to_mac, from_port, to_port, ts) VALUES (%s, %s, %s, %s, %s, %s)"
+        ts = time.time()
+        timestamp = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+        val = (dpid, src, dst, in_port, out_port, timestamp)
+        self.cursor.execute(query, val)
+        self.connection.commit()
 
         actions = [parser.OFPActionOutput(out_port)]
 

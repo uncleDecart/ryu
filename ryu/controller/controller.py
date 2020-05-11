@@ -436,7 +436,7 @@ class Datapath(ofproto_protocol.ProtocolDesc):
         if msg.xid is None:
             self.set_xid(msg)
         msg.serialize()
-        # LOG.debug('send_msg %s', msg)
+        LOG.debug('send_msg %s', msg)
         return self.send(msg.buf, close_socket=close_socket)
 
     def _echo_request_loop(self):

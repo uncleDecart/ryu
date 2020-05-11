@@ -14,6 +14,8 @@ from ryu.lib.packet import ethernet
 from ryu.lib.packet import ether_types
 
 import mysql.connector
+import time
+import datetime
 
 PATH = os.path.dirname(__file__)
 
@@ -26,6 +28,8 @@ class GUIServerApp(app_manager.RyuApp):
 
     def __init__(self, *args, **kwargs):
         super(GUIServerApp, self).__init__(*args, **kwargs)
+        wsgi = kwargs['wsgi']
+        wsgi.register(GUIServerController)
         config = {
           'user' : 'root',
           'password' : 'root',
@@ -36,9 +40,6 @@ class GUIServerApp(app_manager.RyuApp):
         self.connection = mysql.connector.connect(**config)
         self.cursor = self.connection.cursor()
       	self.mac_to_port = {}        
-        wsgi = kwargs['wsgi']
-        wsgi.register(GUIServerController)
-
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -98,12 +99,8 @@ class GUIServerApp(app_manager.RyuApp):
         dpid = format(datapath.id, "d").zfill(16)
         self.mac_to_port.setdefault(dpid, {})
 
-        query = "INSERT INTO events (dpid, from_mac, to_mac, port) VALUES (%d %s %s %d)"
-        val = (dpid, src, dst, in_port)
-        self.cursor.execute(query, val)
-        self.connection.commit()
         self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
-
+        LOG.debug('Datapath in process of terminating; send() in %s %s %s %s', dpid, src, dst, in_port)
         # learn a mac address to avoid FLOOD next time.
         self.mac_to_port[dpid][src] = in_port
 
@@ -111,6 +108,12 @@ class GUIServerApp(app_manager.RyuApp):
             out_port = self.mac_to_port[dpid][dst]
         else:
             out_port = ofproto.OFPP_FLOOD
+        query = "INSERT INTO send_events (dpid, from_mac, to_mac, from_port, to_port, ts) VALUES (%s, %s, %s, %s, %s, %s)"
+        ts = time.time()
+        timestamp = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+        val = (dpid, src, dst, in_port, out_port, timestamp)
+        self.cursor.execute(query, val)
+        self.connection.commit()
 
         actions = [parser.OFPActionOutput(out_port)]
 
@@ -130,8 +133,7 @@ class GUIServerApp(app_manager.RyuApp):
 
         out = parser.OFPPacketOut(datapath=datapath, buffer_id=msg.buffer_id,
                                   in_port=in_port, actions=actions, data=data)
-        datapath.send_msg(out)
-
+#        datapath.send_msg(out)
 
 class GUIServerController(ControllerBase):
     def __init__(self, req, link, data, **config):
@@ -145,10 +147,10 @@ class GUIServerController(ControllerBase):
             req.path_info = kwargs['filename']
         return self.static_app(req)
 
-
 app_manager.require_app('ryu.app.rest_topology')
 app_manager.require_app('ryu.app.ws_topology')
 app_manager.require_app('ryu.app.ofctl_rest')
-app_manager.require_app('ryu.app.rest_qos')
-app_manager.require_app('ryu.app.rest_conf_switch')
+#app_manager.require_app('ryu.app.rest_qos')
+#app_manager.require_app('ryu.app.rest_conf_switch')
+#app_manager.require_app('ryu.app.simple_switch_13')
 
