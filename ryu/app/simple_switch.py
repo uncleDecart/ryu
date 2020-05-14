@@ -98,7 +98,6 @@ class SimpleSwitch(app_manager.RyuApp):
         val = (dpid, src, dst, msg.in_port, out_port, timestamp)
         self.cursor.execute(query, val)
         self.connection.commit()
-        self.logger.info("FUCK ME %s %s %s %s %s", dpid, src, dst, msg.in_port, out_port)
 
         actions = [datapath.ofproto_parser.OFPActionOutput(out_port)]
 
