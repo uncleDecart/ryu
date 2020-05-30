@@ -63,7 +63,7 @@ def dijsktra(graph, initial):
     current_weight = visited[min_node]
 
     for edge in graph.edges[min_node]:
-      weight = current_weight + graph.distance[(min_node, edge)]
+      weight = current_weight + graph.distances[(min_node, edge)]
       if edge not in visited or weight < visited[edge]:
         visited[edge] = weight
         path[edge] = min_node
@@ -88,7 +88,8 @@ class SimpleSwitch(app_manager.RyuApp):
         'database' : 'emulator'
       }
       self.connection = mysql.connector.connect(**config)
-      self.cursor = self.connection.cursor()
+      self.connection.autocommit = True
+      self.cursor = self.connection.cursor(buffered=True)
       self.mac_to_port = {}
       wsgi = kwargs['wsgi']
       wsgi.register(GUIServerController)
@@ -112,10 +113,11 @@ class SimpleSwitch(app_manager.RyuApp):
       if 'h' in name:
         return (0,0,0)
       dpid = dpid_to_str(int(name[1:]))
-      query = "SELECT * FROM charge_state WHERE dpid = %s" % dpid 
+
+
+      query = "SELECT * FROM charge_state WHERE dpid = \'%s\'" % dpid 
       self.cursor.execute(query)
       rv = self.cursor.fetchall() 
-      print "OLOLOLO ", rv
       return rv[0]
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
@@ -127,7 +129,15 @@ class SimpleSwitch(app_manager.RyuApp):
       pkt = packet.Packet(msg.data)
       eth = pkt.get_protocol(ethernet.ethernet)
 
-      if eth.ethertype == ether_types.ETH_TYPE_LLDP:
+      query = "SELECT * FROM charge_state" 
+      self.cursor.execute(query)
+      empty_charge_state = len(self.cursor.fetchall()) == 0
+
+      query = "SELECT * FROM mac_to_dpid" 
+      self.cursor.execute(query)
+      empty_mac_to_dpid = len(self.cursor.fetchall()) == 0
+
+      if eth.ethertype == ether_types.ETH_TYPE_LLDP or empty_charge_state or empty_mac_to_dpid:
         # ignore lldp packet
         return
       dst = eth.dst
@@ -141,12 +151,6 @@ class SimpleSwitch(app_manager.RyuApp):
       self.cursor.execute('SELECT * FROM topology ORDER BY id;')
       links = self.cursor.fetchall()
 
-      query = "SELECT * FROM mac_to_dpid"
-      self.cursor.execute(query)
-      rv = self.cursor.fetchall() 
-      print rv
-      if len(rv) == 0:
-        return
       nodes = set()
       g = Graph()
       for pos, node_a, node_b in links:
@@ -163,7 +167,9 @@ class SimpleSwitch(app_manager.RyuApp):
 
       cur_node = 's%d' % dpid
       _, path = dijsktra(g, cur_node)
-      dst_node = self.cursor.execute('SELECT dpid FROM mac_to_dpid WHERE mac_addr = %s' % eth.dst)
+      self.cursor.execute('SELECT dpid FROM mac_to_dpid WHERE mac_addr = \'%s\'' % eth.dst)
+      dst_node = self.cursor.fetchall()
+      print "YAY ", dst_node
       if 'h' not in dst_node:
         dst_node = 's%d' % int(dst_node)
 
